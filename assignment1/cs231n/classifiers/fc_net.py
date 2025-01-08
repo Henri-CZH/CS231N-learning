@@ -54,8 +54,11 @@ class TwoLayerNet(object):
         # weights and biases using the keys 'W2' and 'b2'.                         #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-        pass
+        self.params['W1'] = np.random.normal(0.0, weight_scale, (input_dim, hidden_dim)) #size: input_dim*hidden_dim
+        self.params['b1'] = np.zeros((hidden_dim, )) #size: 1*hidden_dim
+        
+        self.params['W2'] = np.random.normal(0.0, weight_scale, (hidden_dim, num_classes)) #size: hidden_dim*num_classes[C]
+        self.params['b2'] = np.zeros((num_classes, )) #size: 1*num_classes[C]
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -87,9 +90,11 @@ class TwoLayerNet(object):
         # class scores for X and storing them in the scores variable.              #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-        pass
-
+        outAf1, _ = affine_forward(X, self.params['W1'], self.params['b1']) #size: N*hidden_dim
+        h1, _ = relu_forward(outAf1) #size: N*hidden_dim
+        scores, _ = affine_forward(h1, self.params['W2'], self.params['b2']) #size: N*C
+        
+        
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
         #                             END OF YOUR CODE                             #
@@ -111,9 +116,15 @@ class TwoLayerNet(object):
         # of 0.5 to simplify the expression for the gradient.                      #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        
+        loss, grads_scores = softmax_loss(scores, y) # size: scalar; N*C
+        grads_h1, grads['W2'], grads['b2'] = affine_backward(grads_scores, (h1, self.params['W2'], self.params['b2'])) #size: N*H; 1*C; H*C
+        grads_outAf1 = relu_backward(grads_h1, outAf1)
+        _, grads['W1'], grads['b1'] = affine_backward(grads_outAf1, (X, self.params['W1'], self.params['b1'])) #size: N*D; C*C; 1XH
 
-        pass
-
+        grads['W2'] += self.reg * self.params['W2']
+        grads['W1'] += self.reg * self.params['W1']
+        loss += 0.5 * self.reg * (np.sum(self.params['W1'] * self.params['W1']) + np.sum(self.params['W2'] * self.params['W2']))
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
         #                             END OF YOUR CODE                             #

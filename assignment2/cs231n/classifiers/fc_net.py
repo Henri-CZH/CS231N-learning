@@ -74,7 +74,27 @@ class FullyConnectedNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        for i in range(self.num_layers):
+            weight = 'W' + str(i+1)
+            bias = 'b' + str(i+1)
+            gamma = "gamma" + str(i+1)
+            beta = "beta" + str(i+1)
+            if i == 0: #first layer
+                self.params[weight] = weight_scale * np.random.randn(input_dim, hidden_dims[0]) #Dxh1
+                self.params[bias] = np.zeros(hidden_dims[0]) #1xh1
+                if self.normalization != None:
+                    self.params[gamma] = np.ones(hidden_dims[0]) #1xh1
+                    self.params[beta] = np.zeros(hidden_dims[0]) #1xh1
+            elif i == self.num_layers - 1: #last layer
+                self.params[weight] = weight_scale * np.random.randn(hidden_dims[-1], num_classes) #h[i]xC
+                self.params[bias] = np.zeros(num_classes) #1xC
+            else: #hidden layer
+                self.params[weight] = weight_scale * np.random.randn(hidden_dims[i-1], hidden_dims[i]) #h[i-1]xh[i]
+                self.params[bias] = np.zeros(hidden_dims[i]) #1xh[i]
+                if self.normalization != None:
+                    self.params[gamma] = np.ones(hidden_dims[i]) #1xh[i]
+                    self.params[beta] = np.zeros(hidden_dims[i]) #1xh[i]         
+
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -147,8 +167,42 @@ class FullyConnectedNet(object):
         # layer, etc.                                                              #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        af = []
+        bn = []
+        dr = [X] # initialize dr
+        h = []
+        af_cache = []
+        bn_cache = []
+        dr_cache = []
+        h_cache = []
 
-        pass
+        for i in range(1, self.num_layers, 1):
+            weight = 'W' + str(i)
+            bias = 'b' + str(i)
+            gamma = "gamma" + str(i)
+            beta = "beta" + str(i)
+
+            af.append(None)
+            af_cache.append(None)
+            af[-1], af_cache[-1] = affine_forward(dr[-1], self.params[weight], self.params[bias]) #Nxhi
+
+            bn.append(af[-1])
+            bn_cache.append(None)
+            if self.normalization == "batchnorm":
+                bn[-1], bn_cache[-1] = batchnorm_forward(af[-1], self.params[gamma], self.params[beta], self.bn_params[i-1])
+            elif self.normalization == "layernorm":
+                bn[-1], bn_cache[-1] = layernorm_forward(af[-1], self.params[gamma], self.params[beta], self.bn_params[i-1])
+
+            h.append(None)
+            h_cache.append(None)
+            h[-1], h_cache[-1] = relu_forward(bn[-1])
+            
+            dr.append(h[-1])
+            dr_cache.append(None)
+            if self.use_dropout:
+                dr[-1], dr_cache[-1] = dropout_forward(h[-1], self.dropout_param)
+        
+        scores, scores_cache = affine_forward(dr[-1], self.params['W'+str(self.num_layers)], self.params['b'+str(self.num_layers)]) #NxC
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -174,8 +228,33 @@ class FullyConnectedNet(object):
         # of 0.5 to simplify the expression for the gradient.                      #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        loss, grads_scores = softmax_loss(scores, y) # size: scalar; NxC
+        grads_dr, grads['W'+str(self.num_layers)], grads['b'+str(self.num_layers)] = affine_backward(grads_scores, scores_cache) #size: Nxh[-1]; h[-1]xC; 1xC
+        loss += 0.5 * self.reg * np.sum(self.params['W'+str(self.num_layers)]**2)
+        grads['W'+str(self.num_layers)] += self.reg * self.params['W'+str(self.num_layers)]
+        
+        for i in range(self.num_layers - 1, 0, -1):
+            weight = 'W' + str(i)
+            bias = 'b' + str(i)
+            gamma = "gamma" + str(i)
+            beta = "beta" + str(i)
 
-        pass
+            grads_h = grads_dr #size: Nxh[i-1];
+            if self.use_dropout:
+                grads_h = dropout_backward(grads_dr, dr_cache[i-1])
+            
+            grads_bn = relu_backward(grads_h, h_cache[i-1])
+            
+            grads_af, grads[gamma], grads[beta] = grads_bn, None, None
+            if self.normalization == "batchnorm":
+                grads_af, grads[gamma], grads[beta] = batchnorm_backward(grads_bn, bn_cache[i-1])
+            elif self.normalization == "layernorm":
+                grads_af, grads[gamma], grads[beta] = layernorm_backward(grads_bn, bn_cache[i-1])
+
+            grads_dr, grads[weight], grads[bias] = affine_backward(grads_af, (dr[i-1], self.params[weight], self.params[bias])) #size: Nxh[i-1]; h[i-2]xh[i-1]; 1xh[i-1]
+
+            grads[weight] += self.reg * self.params[weight]
+            loss += 0.5 * self.reg * np.sum(self.params[weight]**2)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################

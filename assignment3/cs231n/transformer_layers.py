@@ -38,7 +38,12 @@ class PositionalEncoding(nn.Module):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        for i in range(max_len):
+            for j in range(embed_dim):
+                if j % 2 == 0:
+                    pe[0, i, j] = math.sin(i * pow(1e4, -j/embed_dim)) #j is even, sin(i * 10000^(-j/d))
+                else:
+                    pe[0, i, j] = math.cos(i * pow(1e4, -(j - 1)/embed_dim)) #j is odd, sin(i * 10000^(-(j-1)/d))
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -70,7 +75,10 @@ class PositionalEncoding(nn.Module):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        # (1) positional encoding
+        output = x + self.pe[:, :S, :] # (N,S,D)
+        # (2) dropout
+        output = self.dropout(output) #dropout
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -165,7 +173,23 @@ class MultiHeadAttention(nn.Module):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        # (1) computer output for ith attention head
+        query_out = self.query(query).reshape((N, S, self.n_head, self.head_dim)) #(N,S,H,E//H)
+        query_out = query_out.permute(0, 2, 1, 3) #(N,H,S,E//H), similar with transpose(1,2)
+        key_out = self.key(key).reshape((N, T, self.n_head, self.head_dim)) #(N,T,H,E//H)
+        key_out = key_out.permute(0, 2, 1, 3) #(N,H,T,E//H)
+        value_out = self.value(value).reshape((N, T, self.n_head, self.head_dim)) #(N,T,H,E//H)
+        value_out = value_out.permute(0, 2, 1, 3) #(N,H,T,E//H)
+        align_out = torch.matmul(query_out, key_out.transpose(2, 3)) / pow(self.head_dim, 0.5) #(N,H,S,E//H)x(N,H,E//H,T)->(N,H,S,T)
+        if attn_mask is not None:
+            align_out.masked_fill_(attn_mask == False, -math.inf) # attention mask in place
+        attn_out = F.softmax(align_out, dim=3)
+        attn_dropped = self.attn_drop(attn_out) # attention drop
+        Yi = torch.matmul(attn_dropped, value_out) #(N,H,S,T)x(N,H,T,E//H)->(N,H,S,E//H)
+
+        # (2) computer output for all attention head
+        Yi = Yi.permute(0,2,1,3).reshape((N,S,E)) #(N,S,H,E//H)->(N,S,E)
+        output = self.proj(Yi) #(N,S,E)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################

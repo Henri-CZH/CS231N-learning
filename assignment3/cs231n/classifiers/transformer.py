@@ -90,7 +90,23 @@ class CaptioningTransformer(nn.Module):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        # (1.1) embed your caption and add positional encoding
+        word_vec = self.embedding(captions) #(N,T)x(V,W)->(N,T,W)
+        pos_vec = self.positional_encoding(word_vec) #(N,T)x(V,W)->(N,T,W)
+
+        # (1.2) project the image features into the same dimensions
+        proj_vec = self.visual_projection(features) #(N,D)x(D,W)->(N,W)
+        proj_vec = proj_vec.unsqueeze(1) #(N,W)->(N,1,W)
+
+        #(2) prepare a mask (tgt_mask) for masking out the future timesteps in captions
+        mask = True * torch.ones(T,T)
+        masked_vec = torch.triu(mask) #(T,T), upper trig angler matrix remains, lower trig angler matrix is zeros
+        
+        #(3.1) apply the decoder features on the text & image embeddings along with the tgt_mask
+        decoder_vec = self.transformer(pos_vec, proj_vec, masked_vec) #(N,T,W)
+
+        #(3.2) Project the output to scores per token
+        scores = self.output(decoder_vec) #(N,T,V)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################

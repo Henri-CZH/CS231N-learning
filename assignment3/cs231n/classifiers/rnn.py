@@ -148,7 +148,39 @@ class CaptioningRNN:
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        # (1) compute the initial hidden state
+        h0, h0_cache = affine_forward(features, W_proj, b_proj) #(N,D)x(D,H)->(NxH)
+
+        # (2) use word embedding layer to transform the words in captions_in from indices to vectors
+        word_vec, word_vec_cache = word_embedding_forward(captions_in, W_embed) #[(N,T), (V,W)]->(N,T,W)
+
+        # (3) use RNN or LSTM to process the sequence of input word vectors and produce hidden state vector
+        if self.cell_type == "rnn":
+            h, h_cache = rnn_forward(word_vec, h0, Wx, Wh, b) #(N,T,H)
+        else:
+            h, h_cache = lstm_forward(word_vec, h0, Wx, Wh, b) #(N,T,H)
+
+        # (4) Use a (temporal) affine transformation to compute scores
+        y, y_cache = temporal_affine_forward(h, W_vocab, b_vocab) #(N,T,V)
+
+        # (5) Use (temporal) softmax to compute loss using captions_out
+        loss, dy = temporal_softmax_loss(y, captions_out, mask) #sclar, (N,T,V)
+
+        # (6) compute backward pass for affine transformation
+        dh, grads["W_vocab"], grads["b_vocab"] = temporal_affine_backward(dy, y_cache) #(N,T,H), (N,V), (V,)
+
+        # (7) compute backwward pass for rnn or lstm
+        dword_vec, dh0 = None, None
+        if self.cell_type == "rnn":
+            dword_vec, dh0, grads["Wx"], grads["Wh"], grads["b"] = rnn_backward(dh, h_cache) #(N,T,W), (W,H), (H,H), (H,)
+        else:
+            dword_vec, dh0, grads["Wx"], grads["Wh"], grads["b"] = lstm_backward(dh, h_cache) #(N,T,W), (W,H), (H,H), (H,)
+
+        # (8) compute backwward pass for word embeddings
+        grads["W_embed"] = word_embedding_backward(dword_vec, word_vec_cache) #(V,W)
+
+        # (9) compute backwward pass for affine layer
+        _, grads["W_proj"], grads["b_proj"] = affine_backward(dh0, h0_cache) #(D,H), (H,)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -216,7 +248,31 @@ class CaptioningRNN:
         ###########################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        # (0) compute the initial hidden state
+        prev_h, _e = affine_forward(features, W_proj, b_proj) #(N,D)x(D,H)->(NxH)
+        captions[:, 0] = 1 # initial word
+        for t in range(max_length):
+            # (1) Embed the previous word
+            captions_t = captions[:, t].reshape((N, 1))
+            word_vec, _ = word_embedding_forward(captions_t, W_embed) #[(N,1), (V,W)]->(N,1,W)
+
+            # (2) use RNN or LSTM to get the next hidden state
+            word_vec = word_vec.reshape((N, -1)) #(N,W)
+            if self.cell_type == "rnn":
+                h, _ = rnn_step_forward(word_vec, prev_h, Wx, Wh, b) #(N,H)
+            else:
+                h, _ = lstm_step_forward(word_vec, prev_h, Wx, Wh, b) #(N,H)
+            prev_h = h #store current h
+
+            # (3) Use a (temporal) affine transformation to compute scores for all words
+            h = h.reshape(h.shape[0], 1, h.shape[1]) #(N,1,H)
+            y, _ = temporal_affine_forward(h, W_vocab, b_vocab) #(N,1,V)
+
+            # (4) Select the word with the highest score as the next word, and write it in the captions variable
+            y = y.reshape((N, -1)) #(N,V)
+            prop = np.exp(y) 
+            prop /= np.sum(prop, axis=1, keepdims=True) #(N,V)
+            captions[:, t] = np.argmax(prop, axis=1) #(N,1)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################

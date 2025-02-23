@@ -14,7 +14,7 @@ def compute_train_transform(seed=123456):
     
     # Transformation that applies color jitter with brightness=0.4, contrast=0.4, saturation=0.4, and hue=0.1
     color_jitter = transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)  
-    
+    grayscale_transform = transforms.Grayscale(num_output_channels=3)
     train_transform = transforms.Compose([
         ##############################################################################
         # TODO: Start of your code.                                                  #
@@ -25,8 +25,11 @@ def compute_train_transform(seed=123456):
         # Step 1: Randomly resize and crop to 32x32.
         transforms.RandomResizedCrop(32),
         # Step 2: Horizontally flip the image with probability 0.5
+        transforms.RandomHorizontalFlip(p=0.5),
         # Step 3: With a probability of 0.8, apply color jitter (you can use "color_jitter" defined above.
+        transforms.RandomApply([color_jitter], p=0.8),
         # Step 4: With a probability of 0.2, convert the image to grayscale
+        transforms.RandomApply([grayscale_transform], p=0.2),
         ##############################################################################
         #                               END OF YOUR CODE                             #
         ##############################################################################
@@ -56,6 +59,7 @@ class CIFAR10Pair(CIFAR10):
             # TODO: Start of your code.                                                  #
             #                                                                            #
             # Apply self.transform to the image to produce x_i and x_j in the paper #
+            x_i, x_j = self.target_transform(img)
             ##############################################################################
             ##############################################################################
             #                               END OF YOUR CODE                             #
